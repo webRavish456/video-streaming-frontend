@@ -51,7 +51,7 @@ Must include the `/api` suffix so `joinApi` / `apiVideosPath` match the backend 
 
 ## Run locally
 
-1. Start the **backend** (default `http://localhost:8000`). See [../backend/README.md](../backend/README.md).
+1. Start the **backend** (default `http://localhost:8000`). 
 2. In this directory:
 
 ```bash
