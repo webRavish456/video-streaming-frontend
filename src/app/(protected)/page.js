@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Chip, Stack, TablePagination } from "@mui/material";
 import { useAuth } from "@/context/AuthContext";
 import { fetchOrgVideos } from "@/lib/orgApi";
 import { isVideoReadyForPlayback } from "@/lib/videoModel";
 import { organizationsForChips } from "@/lib/organizationsForChips";
+import { useStableOrganizations } from "@/lib/useStableOrganizations";
 import UserAvatarMenu from "@/components/UserAvatarMenu";
 
 function VideoCard({ video, orgName }) {
@@ -51,10 +52,7 @@ function VideoCard({ video, orgName }) {
 
 export default function HomePage() {
   const { token, user, setActiveOrganizationId } = useAuth();
-  const organizations = useMemo(
-    () => (Array.isArray(user?.organizations) ? user.organizations : []),
-    [user?.organizations]
-  );
+  const organizations = useStableOrganizations(user?.organizations);
   const chipOrganizations = useMemo(
     () => organizationsForChips(organizations, user?.activeOrganizationId),
     [organizations, user?.activeOrganizationId]
@@ -83,54 +81,55 @@ export default function HomePage() {
   const [videoTotal, setVideoTotal] = useState(0);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
+  const listLoadInFlightRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
     if (!token || !orgId) {
       setVideos([]);
       setVideoTotal(0);
       setListLoading(false);
       setListError("");
-      return () => {
-        cancelled = true;
-      };
+      return undefined;
     }
 
-    const run = async () => {
-      setListLoading(true);
-      setListError("");
-      try {
-        const skip = page * rowsPerPage;
-        const { videos: list, total } = await fetchOrgVideos(token, orgId, {
-          q: search.trim() || undefined,
-          limit: rowsPerPage,
-          skip,
-        });
-        if (!cancelled) {
+    const t = setTimeout(() => {
+      void (async () => {
+        if (listLoadInFlightRef.current) return;
+        listLoadInFlightRef.current = true;
+        setListLoading(true);
+        setListError("");
+        try {
+          const skip = page * rowsPerPage;
+          const { videos: list, total } = await fetchOrgVideos(
+            token,
+            orgId,
+            {
+              q: search.trim() || undefined,
+              limit: rowsPerPage,
+              skip,
+            }
+          );
           setVideos(list);
           setVideoTotal(total);
-        }
-      } catch (e) {
-        if (!cancelled) {
+        } catch (e) {
           setListError(e.message || "Could not load videos");
           setVideos([]);
           setVideoTotal(0);
+        } finally {
+          listLoadInFlightRef.current = false;
+          setListLoading(false);
         }
-      } finally {
-        if (!cancelled) setListLoading(false);
-      }
-    };
+      })();
+    }, search ? 350 : 0);
 
-    const t = setTimeout(run, search ? 350 : 0);
     return () => {
-      cancelled = true;
       clearTimeout(t);
     };
   }, [token, orgId, search, page, rowsPerPage]);
 
   useEffect(() => {
     setPage(0);
-  }, [search, orgId]);
+  }, [orgId]);
 
   useEffect(() => {
     if (videoTotal <= 0) return;
@@ -140,6 +139,7 @@ export default function HomePage() {
 
   const handleSearch = (val) => {
     setSearch(val);
+    setPage(0);
   };
 
   if (!organizations.length) {

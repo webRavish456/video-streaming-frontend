@@ -36,6 +36,7 @@ import {
 import { dialogCancelButtonSx, dialogPrimaryButtonSx } from "@/lib/dialogButtonSx";
 import { getApiOrigin } from "@/lib/videosApi";
 import { organizationsForChips } from "@/lib/organizationsForChips";
+import { useStableOrganizations } from "@/lib/useStableOrganizations";
 
 const MERGE_FETCH_LIMIT = 2000;
 
@@ -198,10 +199,7 @@ function UploadFields({
 
 export default function OrgVideosPage() {
   const { token, user, setActiveOrganizationId } = useAuth();
-  const organizations = useMemo(
-    () => (Array.isArray(user?.organizations) ? user.organizations : []),
-    [user?.organizations]
-  );
+  const organizations = useStableOrganizations(user?.organizations);
   const orgId = user?.activeOrganizationId;
 
   const canUploadAnywhere = useMemo(
@@ -221,6 +219,7 @@ export default function OrgVideosPage() {
   const [livePipeline, setLivePipeline] = useState({});
   const [xhrUploadPercent, setXhrUploadPercent] = useState(null);
   const loadVideosRef = useRef(null);
+  const loadInFlightRef = useRef(false);
 
   const [fSafety, setFSafety] = useState("");
   const [fProcessing, setFProcessing] = useState("");
@@ -280,6 +279,9 @@ export default function OrgVideosPage() {
 
   const loadVideos = useCallback(
     async (opts = {}) => {
+      const force = opts.force === true;
+      if (!force && loadInFlightRef.current) return;
+
       const pageIndex = opts.page ?? page;
       const pageSize = opts.rowsPerPage ?? rowsPerPage;
       const filterQuery = {
@@ -298,7 +300,10 @@ export default function OrgVideosPage() {
         return;
       }
 
-      setLoading(true);
+      if (!force) {
+        loadInFlightRef.current = true;
+        setLoading(true);
+      }
       setError("");
       try {
         if (chipOrgs.length === 0) {
@@ -306,7 +311,6 @@ export default function OrgVideosPage() {
           if (!targetOrgId) {
             setVideos([]);
             setVideoTotal(0);
-            setLoading(false);
             return;
           }
           const { videos: list, total } = await fetchOrgVideos(
@@ -367,7 +371,10 @@ export default function OrgVideosPage() {
         setVideos([]);
         setVideoTotal(0);
       } finally {
-        setLoading(false);
+        if (!force) {
+          loadInFlightRef.current = false;
+          setLoading(false);
+        }
       }
     },
     [
@@ -392,16 +399,7 @@ export default function OrgVideosPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [
-    fSafety,
-    fProcessing,
-    fQ,
-    fDateFrom,
-    fDateTo,
-    fFileSizeBytes,
-    orgId,
-    tableOrgFilter,
-  ]);
+  }, [orgId]);
 
   useEffect(() => {
     loadVideosRef.current = loadVideos;
@@ -446,6 +444,7 @@ export default function OrgVideosPage() {
       if (data.phase === "completed" || data.phase === "failed") {
         void loadVideosRef.current?.({
           organizationId: String(data.organizationId),
+          force: true,
         });
         const vid = data.videoId;
         window.setTimeout(() => {
@@ -540,7 +539,7 @@ export default function OrgVideosPage() {
       setUpDesc("");
       setUpFile(null);
       setUploadModalOpen(false);
-      void loadVideos({ organizationId: modalOrgId });
+      void loadVideos({ organizationId: modalOrgId, force: true });
     } catch (e) {
       setXhrUploadPercent(null);
       setUploadErr(e.message || "Upload failed");
@@ -629,14 +628,14 @@ export default function OrgVideosPage() {
         }
         setEditVideo(null);
         setEditFile(null);
-        void loadVideos();
+        void loadVideos({ force: true });
       } else {
         await patchOrgVideo(token, orgVid, editVideo.id, {
           title,
           description: descTrim,
         });
         setEditVideo(null);
-        void loadVideos();
+        void loadVideos({ force: true });
       }
     } catch (e) {
       setEditErr(e.message || "Update failed");
@@ -669,7 +668,7 @@ export default function OrgVideosPage() {
     try {
       await deleteOrgVideo(token, orgVid, deleteVideo.id);
       setDeleteVideo(null);
-      void loadVideos();
+      void loadVideos({ force: true });
     } catch (e) {
       setDeleteErr(e.message || "Delete failed");
     } finally {
@@ -959,7 +958,10 @@ export default function OrgVideosPage() {
               <Select
                 value={fSafety}
                 label="Safety"
-                onChange={(e) => setFSafety(e.target.value)}
+                onChange={(e) => {
+                  setFSafety(e.target.value);
+                  setPage(0);
+                }}
               >
                 <MenuItem value="">Any</MenuItem>
                 <MenuItem value="safe">safe</MenuItem>
@@ -975,7 +977,10 @@ export default function OrgVideosPage() {
               <Select
                 value={fProcessing}
                 label="Processing"
-                onChange={(e) => setFProcessing(e.target.value)}
+                onChange={(e) => {
+                  setFProcessing(e.target.value);
+                  setPage(0);
+                }}
               >
                 <MenuItem value="">Any</MenuItem>
                 <MenuItem value="ready">ready</MenuItem>
@@ -987,7 +992,10 @@ export default function OrgVideosPage() {
             <TextField
               label="Search"
               value={fQ}
-              onChange={(e) => setFQ(e.target.value)}
+              onChange={(e) => {
+                setFQ(e.target.value);
+                setPage(0);
+              }}
               fullWidth
               size="small"
               placeholder="Title / description"
@@ -998,7 +1006,10 @@ export default function OrgVideosPage() {
               label="From date"
               type="date"
               value={fDateFrom}
-              onChange={(e) => setFDateFrom(e.target.value)}
+              onChange={(e) => {
+                setFDateFrom(e.target.value);
+                setPage(0);
+              }}
               fullWidth
               size="small"
               slotProps={{ inputLabel: { shrink: true } }}
@@ -1009,7 +1020,10 @@ export default function OrgVideosPage() {
               label="To date"
               type="date"
               value={fDateTo}
-              onChange={(e) => setFDateTo(e.target.value)}
+              onChange={(e) => {
+                setFDateTo(e.target.value);
+                setPage(0);
+              }}
               fullWidth
               size="small"
               slotProps={{ inputLabel: { shrink: true } }}
@@ -1019,7 +1033,10 @@ export default function OrgVideosPage() {
             <TextField
               label="File size (bytes)"
               value={fFileSizeBytes}
-              onChange={(e) => setFFileSizeBytes(e.target.value)}
+              onChange={(e) => {
+                setFFileSizeBytes(e.target.value);
+                setPage(0);
+              }}
               fullWidth
               size="small"
               placeholder="e.g. 500000000"
@@ -1050,7 +1067,10 @@ export default function OrgVideosPage() {
             </Typography>
             <Chip
               label="All"
-              onClick={() => setTableOrgFilter("all")}
+              onClick={() => {
+                setTableOrgFilter("all");
+                setPage(0);
+              }}
               color={tableOrgFilter === "all" ? "error" : "default"}
               variant={tableOrgFilter === "all" ? "filled" : "outlined"}
               clickable
@@ -1062,7 +1082,10 @@ export default function OrgVideosPage() {
                 <Chip
                   key={o.id}
                   label={o.name}
-                  onClick={() => setTableOrgFilter(String(o.id))}
+                  onClick={() => {
+                    setTableOrgFilter(String(o.id));
+                    setPage(0);
+                  }}
                   color={selected ? "error" : "default"}
                   variant={selected ? "filled" : "outlined"}
                   clickable
