@@ -2,7 +2,7 @@
 
 Next.js **App Router** client for StreamHub. Talks to the REST API under `NEXT_PUBLIC_API_URL` and subscribes to **Socket.io** on the same host as the API for video progress events.
 
-**Backend docs:** [../backend/README.md](../backend/README.md)
+
 
 ---
 
@@ -51,7 +51,7 @@ Must include the `/api` suffix so `joinApi` / `apiVideosPath` match the backend 
 
 ## Run locally
 
-1. Start the **backend** (default `http://localhost:8000`). See [../backend/README.md](../backend/README.md).
+1. Start the **backend** (default `http://localhost:8000`). 
 2. In this directory:
 
 ```bash
@@ -97,11 +97,4 @@ npm run dev
 - **Upload:** `POST` multipart to same base path; progress via XHR `onprogress`.
 - **Sockets:** connect to API origin (see backend CORS / socket config); listen for progress events keyed by `videoId` / `organizationId`.
 
-Full route list: [../backend/README.md](../backend/README.md#api-routes-summary).
 
----
-
-## Related docs
-
-- [Repository root README](../README.md) — monorepo overview  
-- [Next.js documentation](https://nextjs.org/docs)
